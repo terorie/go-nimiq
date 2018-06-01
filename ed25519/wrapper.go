@@ -5,6 +5,7 @@ package ed25519
 // #include <ed25519.h>
 // #include <stdlib.h>
 import "C"
+import "unsafe"
 
 const (
 	SeedSize = uintptr(32)
@@ -27,10 +28,10 @@ type SharedSecret [SharedSecretSize]byte
 // func PrivateKeyDecompress(…)
 
 func Verify(signature *Signature, message []byte, publicKey *PublicKey) bool {
-	cSignature := C.CBytes(signature[:])
-	cMessage := C.CBytes(message)
+	cSignature := unsafe.Pointer(signature)
+	cMessage := unsafe.Pointer(&message[0])
 	cMessageLen := C.size_t(len(message))
-	cPubKey := C.CBytes(publicKey[:])
+	cPubKey := unsafe.Pointer(publicKey)
 
 	result := C.ed25519_verify(
 		(*C.uchar)(cSignature),
@@ -38,10 +39,6 @@ func Verify(signature *Signature, message []byte, publicKey *PublicKey) bool {
 		cMessageLen,
 		(*C.uchar)(cPubKey),
 	)
-
-	C.free(cSignature)
-	C.free(cMessage)
-	C.free(cPubKey)
 
 	switch result {
 		case 0: return false
@@ -53,30 +50,25 @@ func Verify(signature *Signature, message []byte, publicKey *PublicKey) bool {
 // Single signature functions
 
 func PublicKeyDerive(privateKey *PrivateKey) PublicKey {
-	cPrivateKey := C.CBytes(privateKey[:])
-	cOutPublicKey := C.malloc(C.size_t(PublicKeySize))
+	var outPublicKey PublicKey
+	cPrivateKey := unsafe.Pointer(privateKey)
+	cOutPublicKey := unsafe.Pointer(&outPublicKey)
 
 	C.ed25519_public_key_derive(
 		(*C.uchar)(cOutPublicKey),
 		(*C.uchar)(cPrivateKey),
 	)
 
-	var goPublicKey PublicKey
-	pubKeyBytes := C.GoBytes(cOutPublicKey, C.int(PublicKeySize))
-	copy(goPublicKey[:], pubKeyBytes[:PublicKeySize])
-
-	C.free(cPrivateKey)
-	C.free(cOutPublicKey)
-
-	return goPublicKey
+	return outPublicKey
 }
 
 func Sign(message []byte, publicKey *PublicKey, privateKey *PrivateKey) Signature {
-	cOutSignature := C.malloc(C.size_t(SignatureSize))
-	cMessage := C.CBytes(message)
+	var outSignature Signature
+	cOutSignature := unsafe.Pointer(&outSignature)
+	cMessage := unsafe.Pointer(&message[0])
 	cMessageLen := C.size_t(len(message))
-	cPubKey := C.CBytes(publicKey[:])
-	cPrivKey := C.CBytes(privateKey[:])
+	cPubKey := unsafe.Pointer(publicKey)
+	cPrivKey := unsafe.Pointer(privateKey)
 
 	C.ed25519_sign(
 		(*C.uchar)(cOutSignature),
@@ -86,14 +78,5 @@ func Sign(message []byte, publicKey *PublicKey, privateKey *PrivateKey) Signatur
 		(*C.uchar)(cPrivKey),
 	)
 
-	var goSignature Signature
-	signatureBytes := C.GoBytes(cOutSignature, C.int(SignatureSize))
-	copy(goSignature[:], signatureBytes[:SignatureSize])
-
-	C.free(cOutSignature)
-	C.free(cMessage)
-	C.free(cPubKey)
-	C.free(cPrivKey)
-
-	return goSignature
+	return outSignature
 }

@@ -3,6 +3,7 @@ package ed25519
 import (
 	"testing"
 	"bytes"
+	"math/rand"
 )
 
 func TestVerify(t *testing.T) {
@@ -35,7 +36,55 @@ func TestSign(t *testing.T) {
 	}
 }
 
-// Test data
+func BenchmarkSign(b *testing.B) {
+	// Allocate test data
+	privateKeys := make([]PrivateKey, b.N)
+	publicKeys := make([]PublicKey, b.N)
+	// Ed25519 is hash-then-sign.
+	// Message lengths larger than 64 bytes (bc SHA512)
+	// wouldn't stress Ed25519 directly but the hash algorithm
+	messages := make([][64]byte, b.N)
+	signatures := make([]Signature, b.N)
+
+	// Generate random data
+	for i := 0; i < b.N; i++ {
+		rand.Read(privateKeys[i][:])
+		publicKeys[i] = PublicKeyDerive(&privateKeys[i])
+		rand.Read(messages[i][:])
+	}
+
+	b.ResetTimer()
+
+	// Execute benchmark
+	for i := 0; i < b.N; i++ {
+		signatures[i] = Sign(messages[i][:], &publicKeys[i], &privateKeys[i])
+	}
+}
+
+func BenchmarkVerify(b *testing.B) {
+	// Allocate test data
+	privateKeys := make([]PrivateKey, b.N)
+	publicKeys := make([]PublicKey, b.N)
+	messages := make([][64]byte, b.N)
+	signatures := make([]Signature, b.N)
+
+	// Generate random data
+	for i := 0; i < b.N; i++ {
+		rand.Read(messages[i][:])
+		rand.Read(privateKeys[i][:])
+		publicKeys[i] = PublicKeyDerive(&privateKeys[i])
+		signatures[i] = Sign(messages[i][:], &publicKeys[i], &privateKeys[i])
+	}
+
+	b.ResetTimer()
+
+	// Execute benchmark
+	for i := 0; i < b.N; i++ {
+		Verify(&signatures[i], messages[i][:], &publicKeys[i])
+	}
+}
+
+// Constant test data
 
 var message1 = []byte{
 	0x31, 0x76, 0x31, 0x20, 0x6d, 0x65, 0x20, 0x54,
